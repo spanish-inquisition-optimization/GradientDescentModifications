@@ -2,6 +2,7 @@ from typing import Callable, List, NamedTuple, Tuple
 
 import numpy as np
 import scipy.constants
+from math import exp, floor
 
 
 class SearchRegion2d(NamedTuple):
@@ -14,20 +15,36 @@ precision = 1e-9
 
 def gradient_descent(target_function: Callable[[np.ndarray], float],
                      gradient_function: Callable[[np.ndarray], np.ndarray],
+                     direction_function: Callable[[np.ndarray], np.ndarray],
                      x0: np.ndarray,
                      linear_search: Callable[[Callable[[float], float], Callable[[float], float]], float],
                      terminate_condition: Callable[[Callable[[np.ndarray], float], List[np.ndarray]], bool]):
     points = [np.array(x0)]
     while not terminate_condition(target_function, points):
         last_point = points[-1]
-        g = np.array(gradient_function(last_point))
-        norm = np.linalg.norm(g)
-        if norm == 0 or norm > 1e20:
+        direction = np.array(direction_function(last_point))
+        norm = np.linalg.norm(direction)
+
+        if norm == 0:
+            continue
+        if norm > 1e20:
             return points
-        next_point = last_point - g * linear_search(lambda l: target_function(last_point - g * l),
-                                                    lambda l: -np.dot(g, gradient_function(last_point - g * l)))
+
+        # false positive warning: np.dot returns scalar in this case
+        next_point = last_point + direction * linear_search(lambda l: target_function(last_point + direction * l),
+                                                            lambda l: np.dot(direction, gradient_function(
+                                                                last_point + direction * l)))
         points.append(next_point)
     return points
+
+
+def steepest_descent(target_function: Callable[[np.ndarray], float],
+                     gradient_function: Callable[[np.ndarray], np.ndarray],
+                     x0: np.ndarray,
+                     linear_search: Callable[[Callable[[float], float], Callable[[float], float]], float],
+                     terminate_condition: Callable[[Callable[[np.ndarray], float], List[np.ndarray]], bool]):
+    return gradient_descent(target_function, gradient_function, lambda x: -gradient_function(x), x0, linear_search,
+                            terminate_condition)
 
 
 """ Could be:
@@ -43,6 +60,46 @@ def find_upper_bound(f: Callable[[float], float], derivative: Callable[[float], 
 
     return r
 """
+
+
+def gradient_descent_minibatch(target_functions: List[Callable[[np.ndarray], float]],
+                               gradient_functions: List[Callable[[np.ndarray], np.ndarray]],
+                               batch_size: int,
+                               x0: np.ndarray,
+                               learning_rate_scheduler: Callable[[int], float],
+                               terminate_condition: Callable[[Callable[[np.ndarray], float], List[np.ndarray]], bool]):
+    assert len(target_functions) == len(gradient_functions)
+    permutation = np.random.permutation(len(target_functions))
+
+    def sum_functions(funcs):
+        return lambda x: sum(f(x) for f in funcs)
+
+    def with_call_num(f):
+        call_num = 0
+
+        def resulting_func(*args):
+            nonlocal call_num
+            result = f(call_num, *args)
+            call_num += 1
+            return result
+
+        return resulting_func
+
+    def get_direction(iteration: int, x: np.ndarray):
+        return -sum(gradient_functions[permutation[(iteration * batch_size + i) % len(permutation)]](x) for i in
+                    range(batch_size))
+
+    return gradient_descent(sum_functions(target_functions), sum_functions(gradient_functions),
+                            with_call_num(get_direction), x0, with_call_num(learning_rate_scheduler),
+                            terminate_condition)
+
+
+def step_learning_scheduler(initial_rate: float, step_rate: float, step_length: int):
+    return lambda n, *args: initial_rate * step_rate ** floor(n / step_length)
+
+
+def exponential_learning_scheduler(initial_rate: float, step_rate: float):
+    return lambda n, *args: initial_rate * exp(-step_rate * n)
 
 
 def find_upper_bound(f: Callable[[float], float]):
@@ -158,7 +215,7 @@ def wolfe_conditions_search(c1, c2):
             return initial_value + initial_slope * c1 * x
 
         def zoom(left, right):
-            assert(left < right)
+            assert (left < right)
             while True:
                 mid = (left + right) / 2
                 value = f(mid)
