@@ -44,7 +44,8 @@ def steepest_descent(target_function: Callable[[np.ndarray], float],
                      linear_search: Callable[[Callable[[float], float], Callable[[float], float]], float],
                      terminate_condition: Callable[[Callable[[np.ndarray], float], List[np.ndarray]], bool]):
     return gradient_descent(target_function, gradient_function, lambda x: -gradient_function(x), x0, linear_search,
-                            terminate_condition)
+                            lambda f, steps: terminate_condition(f, steps) or (
+                                        len(steps) > 2 and np.linalg.norm(steps[-1] - steps[-2]) < precision))
 
 
 """ Could be:
