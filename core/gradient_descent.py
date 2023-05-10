@@ -70,7 +70,7 @@ def gradient_descent_minibatch(target_functions: List[Callable[[np.ndarray], flo
                                learning_rate_scheduler: Callable[[int], float],
                                terminate_condition: Callable[[Callable[[np.ndarray], float], List[np.ndarray]], bool]):
     assert len(target_functions) == len(gradient_functions)
-    permutation = np.random.permutation(len(target_functions))
+    ordered_gradient_functions = np.random.permutation(gradient_functions)
 
     def sum_functions(funcs):
         return lambda x: sum(f(x) for f in funcs)
@@ -87,7 +87,7 @@ def gradient_descent_minibatch(target_functions: List[Callable[[np.ndarray], flo
         return resulting_func
 
     def get_direction(iteration: int, x: np.ndarray):
-        return -sum(gradient_functions[permutation[(iteration * batch_size + i) % len(permutation)]](x) for i in
+        return -sum(ordered_gradient_functions[(iteration * batch_size + i) % len(gradient_functions)](x) for i in
                     range(batch_size))
 
     return gradient_descent(sum_functions(target_functions), sum_functions(gradient_functions),
