@@ -76,7 +76,7 @@ def adagrad_descent(target_function: Callable[[np.ndarray], float],
         nonlocal G
         current_direction = -direction_function(x)
         G = G + np.square(current_direction)
-        return -np.multiply(np.array([1 / (sqrt(x + 1e-5)) for x in G]), current_direction)
+        return -np.multiply(np.array([1 / (sqrt(x + 1e-8)) for x in G]), current_direction)
 
     return gradient_descent(target_function, gradient_function, get_direction, x0, linear_search, terminate_condition)
 
@@ -95,7 +95,7 @@ def rms_prop_descent(gamma: float):
         def get_direction(x: np.ndarray, **kwargs):
             nonlocal G
             G = gamma * G + (1 - gamma) * np.square(-direction_function(x))
-            return -np.multiply(np.array([1 / (sqrt(x + 1e-5)) for x in G]), -direction_function(x))
+            return -np.multiply(np.array([1 / (sqrt(x + 1e-8)) for x in G]), -direction_function(x))
 
         return gradient_descent(target_function, gradient_function, get_direction, x0, linear_search,
                                 terminate_condition)
@@ -211,12 +211,14 @@ def gradient_descent_minibatch_rms_prop(gamma: float):
     return gradient_descent_minibatch_base(gradient_descent_with_momentum(gamma))
 
 
-def step_learning_scheduler(initial_rate: float, step_rate: float, step_length: int):
-    return lambda *args, iteration=0, **kwargs: initial_rate * step_rate ** floor(iteration / step_length)
+def step_learning_scheduler(initial_rate: float, step_rate: float, step_length: int, batch_size: int, total_funcs: int):
+    return lambda *args, iteration=0, **kwargs: initial_rate * step_rate ** floor(
+        floor(iteration * batch_size / total_funcs) / step_length)
 
 
-def exponential_learning_scheduler(initial_rate: float, step_rate: float):
-    return lambda *args, iteration=0, **kwargs: initial_rate * exp(-step_rate * iteration)
+def exponential_learning_scheduler(initial_rate: float, step_rate: float, batch_size: int, total_funcs: int):
+    return lambda *args, iteration=0, **kwargs: initial_rate * exp(
+        -step_rate * floor(iteration * batch_size / total_funcs))
 
 
 def find_upper_bound(f: Callable[[float], float]):
