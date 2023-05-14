@@ -5,7 +5,7 @@ from core.gradient_descent import *
 from core.utils import *
 
 
-def test_batch(fs, dfs, x0):
+def test_batch(fs, dfs, x0, scheduler):
     f = fn_sum(*fs)
     df = fn_sum(*dfs)
 
@@ -16,16 +16,20 @@ def test_batch(fs, dfs, x0):
     )[-1]
 
     target_val = f(target_point)
-    print(f"target point = {target_point}, with value = {target_val}")
+    # print(f"target point = {target_point}, with value = {target_val}")
 
+    result = []
     for batch in range(1, len(fs) + 1):
-        point = gradient_descent_minibatch(
+        points = gradient_descent_minibatch(
             fs, dfs, batch, x0,
-            exponential_learning_scheduler(0.3, 0.2, batch, len(fs)),
-            lambda f, steps: len(steps) > 20
-        )[-1]
+            scheduler(batch),
+            lambda f, steps: abs(f(steps[-1]) - target_val) < 0.01 or len(steps) > 200
+        )
 
-        print(f"with batch = {batch} point = {point}, value = {f(point)}")
+        result.append((f"batch = {batch}", len(points)))
+
+    return result
+
 
 
 def test_perfomance(funs, dfuns, batch_size, x0):
