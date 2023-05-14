@@ -54,13 +54,9 @@ def gradient_descent_with_momentum(gamma: float, nesterov=False):
                         x0: np.ndarray,
                         linear_search: Callable[[Callable[[float], float], Callable[[float], float]], float],
                         terminate_condition: Callable[[Callable[[np.ndarray], float], List[np.ndarray]], bool]):
-        previous_direction = 0
-
         def get_direction(x: np.ndarray, last_step_length=0, last_direction=None, **kwargs):
-            nonlocal previous_direction
-            previous_direction = gamma * previous_direction + (1 - gamma) * -direction_function(
-                x + last_step_length * last_direction if nesterov else x, **kwargs)
-            return -previous_direction
+            return -(gamma * -last_direction + (1 - gamma) * -direction_function(
+                x + last_step_length * last_direction if nesterov else x, **kwargs))
 
         return gradient_descent(target_function, gradient_function, get_direction, x0, linear_search,
                                 terminate_condition)
@@ -83,6 +79,28 @@ def adagrad_descent(target_function: Callable[[np.ndarray], float],
         return -np.multiply(np.array([1 / (sqrt(x + 1e-5)) for x in G]), current_direction)
 
     return gradient_descent(target_function, gradient_function, get_direction, x0, linear_search, terminate_condition)
+
+
+def rms_prop_descent(gamma: float):
+    assert 0 <= gamma < 1
+
+    def search_function(target_function: Callable[[np.ndarray], float],
+                        gradient_function: Callable[[np.ndarray], np.ndarray],
+                        direction_function,
+                        x0: np.ndarray,
+                        linear_search: Callable[[Callable[[float], float], Callable[[float], float]], float],
+                        terminate_condition: Callable[[Callable[[np.ndarray], float], List[np.ndarray]], bool]):
+        G = 0
+
+        def get_direction(x: np.ndarray, **kwargs):
+            nonlocal G
+            G = gamma * G + (1 - gamma) * np.square(-direction_function(x))
+            return -np.multiply(np.array([1 / (sqrt(x + 1e-5)) for x in G]), -direction_function(x))
+
+        return gradient_descent(target_function, gradient_function, get_direction, x0, linear_search,
+                                terminate_condition)
+
+    return search_function
 
 
 def steepest_descent_base(base_search):
@@ -119,6 +137,10 @@ def steepest_descent_adagrad(target_function: Callable[[np.ndarray], float],
                              terminate_condition: Callable[[Callable[[np.ndarray], float], List[np.ndarray]], bool]):
     return steepest_descent_base(adagrad_descent)(target_function, gradient_function, x0, linear_search,
                                                   terminate_condition)
+
+
+def steepest_descent_rms_prop(gamma: float):
+    return steepest_descent_base(rms_prop_descent(gamma))
 
 
 """ Could be:
@@ -183,6 +205,10 @@ def gradient_descent_minibatch_adagrad(target_functions: List[Callable[[np.ndarr
                                            [Callable[[np.ndarray], float], List[np.ndarray]], bool]):
     return gradient_descent_minibatch_base(adagrad_descent)(target_functions, gradient_functions, batch_size, x0,
                                                             learning_rate_scheduler, terminate_condition)
+
+
+def gradient_descent_minibatch_rms_prop(gamma: float):
+    return gradient_descent_minibatch_base(gradient_descent_with_momentum(gamma))
 
 
 def step_learning_scheduler(initial_rate: float, step_rate: float, step_length: int):
