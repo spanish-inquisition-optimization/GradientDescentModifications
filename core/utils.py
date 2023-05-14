@@ -5,7 +5,7 @@ class CallsCount:
 
     def __call__(self, *args, **kwargs):
         self.calls += 1
-        self.fn(*args, **kwargs)
+        return self.fn(*args, **kwargs)
 
 
 def fn_sum(*args):
