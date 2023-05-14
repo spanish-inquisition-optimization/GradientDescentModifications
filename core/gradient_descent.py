@@ -104,6 +104,32 @@ def rms_prop_descent(gamma: float):
     return search_function
 
 
+def adam_descent(alpha: float, beta: float):
+    assert (0 < alpha < 1 and 0 < beta < 1)
+
+    def search_function(target_function: Callable[[np.ndarray], float],
+                        gradient_function: Callable[[np.ndarray], np.ndarray],
+                        direction_function,
+                        x0: np.ndarray,
+                        linear_search: Callable[[Callable[[float], float], Callable[[float], float]], float],
+                        terminate_condition: Callable[[Callable[[np.ndarray], float], List[np.ndarray]], bool]):
+        v = 0
+        s = 0
+
+        def get_direction(x: np.ndarray, iteration=0, **kwargs):
+            nonlocal v, s
+            current_direction = -direction_function(x, iteration=iteration, **kwargs)
+            v = alpha * v + (1 - alpha) * current_direction
+            s = beta * s + (1 - beta) * np.square(current_direction)
+            return -np.multiply(np.array([1 / (sqrt(x / (1 - beta ** (iteration + 1)) + 1e-8)) for x in s]),
+                                v / (1 - alpha ** (iteration + 1)))
+
+        return gradient_descent(target_function, gradient_function, get_direction, x0, linear_search,
+                                terminate_condition)
+
+    return search_function
+
+
 def steepest_descent_base(base_search):
     def result(target_function: Callable[[np.ndarray], float],
                gradient_function: Callable[[np.ndarray], np.ndarray],
@@ -142,6 +168,10 @@ def steepest_descent_adagrad(target_function: Callable[[np.ndarray], float],
 
 def steepest_descent_rms_prop(gamma: float):
     return steepest_descent_base(rms_prop_descent(gamma))
+
+
+def steepest_descent_adam(alpha: float, beta: float):
+    return steepest_descent_base(adam_descent(alpha, beta))
 
 
 """ Could be:
@@ -210,6 +240,10 @@ def gradient_descent_minibatch_adagrad(target_functions: List[Callable[[np.ndarr
 
 def gradient_descent_minibatch_rms_prop(gamma: float):
     return gradient_descent_minibatch_base(rms_prop_descent(gamma))
+
+
+def gradient_descent_minibatch_adam(alpha: float, beta: float):
+    return gradient_descent_minibatch_base(adam_descent(alpha, beta))
 
 
 def step_learning_scheduler(initial_rate: float, step_rate: float, step_length: int, batch_size: int, total_funcs: int):
