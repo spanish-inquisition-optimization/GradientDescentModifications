@@ -2,7 +2,7 @@ from typing import Callable, List, NamedTuple, Tuple
 
 import numpy as np
 import scipy.constants
-from math import exp, floor
+from math import exp, floor, sqrt
 
 
 class SearchRegion2d(NamedTuple):
@@ -68,6 +68,23 @@ def gradient_descent_with_momentum(gamma: float, nesterov=False):
     return search_function
 
 
+def adagrad_descent(target_function: Callable[[np.ndarray], float],
+                    gradient_function: Callable[[np.ndarray], np.ndarray],
+                    direction_function,
+                    x0: np.ndarray,
+                    linear_search: Callable[[Callable[[float], float], Callable[[float], float]], float],
+                    terminate_condition: Callable[[Callable[[np.ndarray], float], List[np.ndarray]], bool]):
+    G = 0
+
+    def get_direction(x: np.ndarray, **kwargs):
+        nonlocal G
+        current_direction = -direction_function(x)
+        G = G + np.square(current_direction)
+        return -np.multiply(np.array([1 / (sqrt(x + 1e-5)) for x in G]), current_direction)
+
+    return gradient_descent(target_function, gradient_function, get_direction, x0, linear_search, terminate_condition)
+
+
 def steepest_descent_base(base_search):
     def result(target_function: Callable[[np.ndarray], float],
                gradient_function: Callable[[np.ndarray], np.ndarray],
@@ -93,6 +110,15 @@ def steepest_descent(target_function: Callable[[np.ndarray], float],
 
 def steepest_descent_with_momentum(gamma: float, nesterov=False):
     return steepest_descent_base(gradient_descent_with_momentum(gamma, nesterov))
+
+
+def steepest_descent_adagrad(target_function: Callable[[np.ndarray], float],
+                             gradient_function: Callable[[np.ndarray], np.ndarray],
+                             x0: np.ndarray,
+                             linear_search: Callable[[Callable[[float], float], Callable[[float], float]], float],
+                             terminate_condition: Callable[[Callable[[np.ndarray], float], List[np.ndarray]], bool]):
+    return steepest_descent_base(adagrad_descent)(target_function, gradient_function, x0, linear_search,
+                                                  terminate_condition)
 
 
 """ Could be:
@@ -148,6 +174,17 @@ def gradient_descent_minibatch_with_momentum(gamma: float, nesterov=False):
     return gradient_descent_minibatch_base(gradient_descent_with_momentum(gamma, nesterov))
 
 
+def gradient_descent_minibatch_adagrad(target_functions: List[Callable[[np.ndarray], float]],
+                                       gradient_functions: List[Callable[[np.ndarray], np.ndarray]],
+                                       batch_size: int,
+                                       x0: np.ndarray,
+                                       learning_rate_scheduler: Callable[[int], float],
+                                       terminate_condition: Callable[
+                                           [Callable[[np.ndarray], float], List[np.ndarray]], bool]):
+    return gradient_descent_minibatch_base(adagrad_descent)(target_functions, gradient_functions, batch_size, x0,
+                                                            learning_rate_scheduler, terminate_condition)
+
+
 def step_learning_scheduler(initial_rate: float, step_rate: float, step_length: int):
     return lambda *args, iteration=0, **kwargs: initial_rate * step_rate ** floor(iteration / step_length)
 
@@ -168,7 +205,7 @@ def find_upper_bound(f: Callable[[float], float]):
 
 
 def fixed_step_search(step_length):
-    return lambda f, derivative: step_length
+    return lambda f, derivative, **kwargs: step_length
 
 
 def bin_search(f: Callable[[float], float], derivative: Callable[[float], float], **kwargs):
