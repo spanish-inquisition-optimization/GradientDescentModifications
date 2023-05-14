@@ -44,43 +44,43 @@ def test_perfomance(funs, dfuns, batch_size, x0):
     def terminate(f, steps):
         return f(steps[-1]) < 0.001 or len(steps) > 1000
 
-    gradient_descent_minibatch(
+    p1 = gradient_descent_minibatch(
         f1, df1, batch_size, x0,
         exponential_learning_scheduler(0.3, 0.2, batch_size, len(funs)),
         terminate
     )
 
-    gradient_descent_minibatch_with_momentum(0.2)(
+    p2 = gradient_descent_minibatch_with_momentum(0.2)(
         f2, df2, batch_size, x0,
         exponential_learning_scheduler(0.3, 0.2, batch_size, len(funs)),
         terminate
     )
 
-    gradient_descent_minibatch_with_momentum(0.7, True)(
+    p3 = gradient_descent_minibatch_with_momentum(0.7, True)(
         f3, df3, batch_size, x0,
         exponential_learning_scheduler(0.3, 0.2, batch_size, len(funs)),
         terminate
     )
 
-    gradient_descent_minibatch_adagrad(
+    p4 = gradient_descent_minibatch_adagrad(
         f4, df4, batch_size, x0,
         fixed_step_search(5),
         terminate
     )
 
-    gradient_descent_minibatch_rms_prop(0.2)(
+    p5 = gradient_descent_minibatch_rms_prop(0.2)(
         f5, df5, batch_size, x0,
         exponential_learning_scheduler(0.3, 0.2, batch_size, len(funs)),
         terminate
     )
 
-    steepest_descent_adam(0.9, 0.999)(fn_sum(*f6), fn_sum(*df6), x0, fixed_step_search(1), terminate)
+    p6 = steepest_descent_adam(0.9, 0.999)(fn_sum(*f6), fn_sum(*df6), x0, fixed_step_search(10), terminate)
 
     return [
-        (f"Minibatch", sum(f.calls for f in df1)),
-        (f"Momentum", sum(f.calls for f in df2)),
-        (f"Nesterov", sum(f.calls for f in df3)),
-        (f"AdaGrad", sum(f.calls for f in df4)),
-        (f"RMSProp", sum(f.calls for f in df5)),
-        (f"Adam", sum(f.calls for f in df6))
+        (f"Minibatch", f"{sum(f.calls for f in f1) + sum(f.calls for f in df1)}/{len(p1)}"),
+        (f"Momentum", f"{sum(f.calls for f in f2) + sum(f.calls for f in df2)}/{len(p2)}"),
+        (f"Nesterov", f"{sum(f.calls for f in f3) + sum(f.calls for f in df3)}/{len(p3)}"),
+        (f"AdaGrad", f"{sum(f.calls for f in f4) + sum(f.calls for f in df4)}/{len(p4)}"),
+        (f"RMSProp", f"{sum(f.calls for f in f5) + sum(f.calls for f in df5)}/{len(p5)}"),
+        (f"Adam", f"{sum(f.calls for f in f6) + sum(f.calls for f in df6)}/{len(p6)}")
     ]
