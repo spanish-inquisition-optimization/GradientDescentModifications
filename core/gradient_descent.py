@@ -94,8 +94,9 @@ def rms_prop_descent(gamma: float):
 
         def get_direction(x: np.ndarray, **kwargs):
             nonlocal G
-            G = gamma * G + (1 - gamma) * np.square(-direction_function(x))
-            return -np.multiply(np.array([1 / (sqrt(x + 1e-8)) for x in G]), -direction_function(x, **kwargs))
+            current_direction = -direction_function(x, **kwargs)
+            G = gamma * G + (1 - gamma) * np.square(current_direction)
+            return -np.multiply(np.array([1 / (sqrt(x + 1e-8)) for x in G]), current_direction)
 
         return gradient_descent(target_function, gradient_function, get_direction, x0, linear_search,
                                 terminate_condition)
