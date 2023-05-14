@@ -21,56 +21,58 @@ def test_batch(fs, dfs, x0):
     for batch in range(1, len(fs) + 1):
         point = gradient_descent_minibatch(
             fs, dfs, batch, x0,
-            exponential_learning_scheduler(0.3, 0.2),
+            exponential_learning_scheduler(0.3, 0.2, batch, len(fs)),
             lambda f, steps: len(steps) > 20
         )[-1]
 
         print(f"with batch = {batch} point = {point}, value = {f(point)}")
 
 
-
 def test_perfomance(funs, dfuns, batch_size, x0):
-    wrap_input = lambda fs, dfs: ([CallsCount(f) for f in fs], [CallsCount(f) for f in dfs])
-    target_point = steepest_descent(
-        fn_sum(*funs), fn_sum(*dfuns), x0,
-        wolfe_conditions_search(0.9, 0.95),
-        lambda f, steps: len(steps) > 40
-    )[-1]
-
-    target_val = fn_sum(*funs)(target_point)
-
-    print(target_point)
-    print(target_val)
-
-    f1, df1 = wrap_input(funs, dfuns)
-    f2, df2 = wrap_input(funs, dfuns)
-    f3, df3 = wrap_input(funs, dfuns)
+    wrap_input = lambda: ([CallsCount(f) for f in funs], [CallsCount(f) for f in dfuns])
+    f1, df1 = wrap_input()
+    f2, df2 = wrap_input()
+    f3, df3 = wrap_input()
+    f4, df4 = wrap_input()
+    f5, df5 = wrap_input()
 
     def terminate(f, steps):
-        # print(f"last is {steps[-1]}")
-        # print(f"f = {f(steps[-1])}")
-        return abs(f(steps[-1]) - target_val) < 1
+        return f(steps[-1]) < 0.001 or len(steps) > 100
 
     gradient_descent_minibatch(
         f1, df1, batch_size, x0,
-        exponential_learning_scheduler(0.3, 0.2),
+        exponential_learning_scheduler(0.3, 0.2, batch_size, len(funs)),
         terminate
     )
 
-    gradient_descent_minibatch_with_momentum(0.5)(
+    gradient_descent_minibatch_with_momentum(0.2)(
         f2, df2, batch_size, x0,
-        exponential_learning_scheduler(0.3, 0.2),
+        exponential_learning_scheduler(0.3, 0.2, batch_size, len(funs)),
         terminate
     )
 
-    gradient_descent_minibatch_with_momentum(0.5, True)(
+    gradient_descent_minibatch_with_momentum(0.7, True)(
         f3, df3, batch_size, x0,
-        exponential_learning_scheduler(0.3, 0.2),
+        exponential_learning_scheduler(0.3, 0.2, batch_size, len(funs)),
+        terminate
+    )
+
+    gradient_descent_minibatch_adagrad(
+        f4, df4, batch_size, x0,
+        fixed_step_search(5),
+        terminate
+    )
+
+    gradient_descent_minibatch_rms_prop(0.2)(
+        f5, df5, batch_size, x0,
+        exponential_learning_scheduler(0.3, 0.2, batch_size, len(funs)),
         terminate
     )
 
     return [
-        (f"{batch_size}-Minibatch gradient descent", sum(f.calls for f in df1)),
-        (f"Minibatch with momentum", sum(f.calls for f in df2)),
-        (f"Nesterov", sum(f.calls for f in df3))
+        (f"Minibatch", sum(f.calls for f in df1)),
+        (f"Momentum", sum(f.calls for f in df2)),
+        (f"Nesterov", sum(f.calls for f in df3)),
+        (f"AdaGrad", sum(f.calls for f in df4)),
+        (f"RMSProp", sum(f.calls for f in df5)),
     ]
