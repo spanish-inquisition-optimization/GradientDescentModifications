@@ -38,14 +38,52 @@ def gradient_descent(target_function: Callable[[np.ndarray], float],
     return points
 
 
+def gradient_descent_with_momentum(gamma: float):
+    assert 0 <= gamma < 1
+
+    def search_function(target_function: Callable[[np.ndarray], float],
+                        gradient_function: Callable[[np.ndarray], np.ndarray],
+                        direction_function: Callable[[np.ndarray], np.ndarray],
+                        x0: np.ndarray,
+                        linear_search: Callable[[Callable[[float], float], Callable[[float], float]], float],
+                        terminate_condition: Callable[[Callable[[np.ndarray], float], List[np.ndarray]], bool]):
+        previous_direction = 0
+
+        def get_direction(x: np.ndarray):
+            nonlocal previous_direction
+            previous_direction = gamma * previous_direction + (1 - gamma) * -direction_function(x)
+            return -previous_direction
+
+        return gradient_descent(target_function, gradient_function, get_direction, x0, linear_search,
+                                terminate_condition)
+
+    return search_function
+
+
+def steepest_descent_base(base_search):
+    def result(target_function: Callable[[np.ndarray], float],
+               gradient_function: Callable[[np.ndarray], np.ndarray],
+               x0: np.ndarray,
+               linear_search: Callable[[Callable[[float], float], Callable[[float], float]], float],
+               terminate_condition: Callable[[Callable[[np.ndarray], float], List[np.ndarray]], bool]):
+        return base_search(target_function, gradient_function, lambda x: -gradient_function(x), x0, linear_search,
+                           lambda f, steps: terminate_condition(f, steps) or (
+                                   len(steps) > 2 and np.linalg.norm(steps[-1] - steps[-2]) < precision))
+
+    return result
+
+
 def steepest_descent(target_function: Callable[[np.ndarray], float],
                      gradient_function: Callable[[np.ndarray], np.ndarray],
                      x0: np.ndarray,
                      linear_search: Callable[[Callable[[float], float], Callable[[float], float]], float],
                      terminate_condition: Callable[[Callable[[np.ndarray], float], List[np.ndarray]], bool]):
-    return gradient_descent(target_function, gradient_function, lambda x: -gradient_function(x), x0, linear_search,
-                            lambda f, steps: terminate_condition(f, steps) or (
-                                        len(steps) > 2 and np.linalg.norm(steps[-1] - steps[-2]) < precision))
+    return steepest_descent_base(gradient_descent)(target_function, gradient_function, x0, linear_search,
+                                                   terminate_condition)
+
+
+def steepest_descent_with_momentum(gamma: float):
+    return steepest_descent_base(gradient_descent_with_momentum(gamma))
 
 
 """ Could be:
@@ -63,36 +101,53 @@ def find_upper_bound(f: Callable[[float], float], derivative: Callable[[float], 
 """
 
 
+def gradient_descent_minibatch_base(base_search):
+    def result(target_functions: List[Callable[[np.ndarray], float]],
+               gradient_functions: List[Callable[[np.ndarray], np.ndarray]],
+               batch_size: int,
+               x0: np.ndarray,
+               learning_rate_scheduler: Callable[[int], float],
+               terminate_condition: Callable[[Callable[[np.ndarray], float], List[np.ndarray]], bool]):
+        assert len(target_functions) == len(gradient_functions)
+        ordered_gradient_functions = np.random.permutation(gradient_functions)
+
+        def sum_functions(funcs):
+            return lambda x: sum(f(x) for f in funcs)
+
+        def with_call_num(f):
+            call_num = 0
+
+            def resulting_func(*args):
+                nonlocal call_num
+                result = f(call_num, *args)
+                call_num += 1
+                return result
+
+            return resulting_func
+
+        def get_direction(iteration: int, x: np.ndarray):
+            return -sum(ordered_gradient_functions[(iteration * batch_size + i) % len(gradient_functions)](x) for i in
+                        range(batch_size))
+
+        return base_search(sum_functions(target_functions), sum_functions(gradient_functions),
+                           with_call_num(get_direction), x0, with_call_num(learning_rate_scheduler),
+                           terminate_condition)
+
+    return result
+
+
 def gradient_descent_minibatch(target_functions: List[Callable[[np.ndarray], float]],
                                gradient_functions: List[Callable[[np.ndarray], np.ndarray]],
                                batch_size: int,
                                x0: np.ndarray,
                                learning_rate_scheduler: Callable[[int], float],
                                terminate_condition: Callable[[Callable[[np.ndarray], float], List[np.ndarray]], bool]):
-    assert len(target_functions) == len(gradient_functions)
-    ordered_gradient_functions = np.random.permutation(gradient_functions)
+    return gradient_descent_minibatch_base(gradient_descent)(target_functions, gradient_functions, batch_size, x0,
+                                                             learning_rate_scheduler, terminate_condition)
 
-    def sum_functions(funcs):
-        return lambda x: sum(f(x) for f in funcs)
 
-    def with_call_num(f):
-        call_num = 0
-
-        def resulting_func(*args):
-            nonlocal call_num
-            result = f(call_num, *args)
-            call_num += 1
-            return result
-
-        return resulting_func
-
-    def get_direction(iteration: int, x: np.ndarray):
-        return -sum(ordered_gradient_functions[(iteration * batch_size + i) % len(gradient_functions)](x) for i in
-                    range(batch_size))
-
-    return gradient_descent(sum_functions(target_functions), sum_functions(gradient_functions),
-                            with_call_num(get_direction), x0, with_call_num(learning_rate_scheduler),
-                            terminate_condition)
+def gradient_descent_minibatch_with_momentum(gamma: float):
+    return gradient_descent_minibatch_base(gradient_descent_with_momentum(gamma))
 
 
 def step_learning_scheduler(initial_rate: float, step_rate: float, step_length: int):
