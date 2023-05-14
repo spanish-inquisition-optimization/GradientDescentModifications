@@ -15,15 +15,21 @@ precision = 1e-9
 
 def gradient_descent(target_function: Callable[[np.ndarray], float],
                      gradient_function: Callable[[np.ndarray], np.ndarray],
-                     direction_function: Callable[[np.ndarray], np.ndarray],
+                     direction_function,
                      x0: np.ndarray,
-                     linear_search: Callable[[Callable[[float], float], Callable[[float], float]], float],
+                     linear_search,
                      terminate_condition: Callable[[Callable[[np.ndarray], float], List[np.ndarray]], bool]):
     points = [np.array(x0)]
+    last_step_length = 0
+    last_direction = 0
+
     while not terminate_condition(target_function, points):
         last_point = points[-1]
-        direction = np.array(direction_function(last_point))
-        norm = np.linalg.norm(direction)
+        iteration = len(points) - 1
+        last_direction = np.array(
+            direction_function(last_point, last_step_length=last_step_length, last_direction=last_direction,
+                               iteration=iteration))
+        norm = np.linalg.norm(last_direction)
 
         if norm == 0:
             continue
@@ -31,27 +37,29 @@ def gradient_descent(target_function: Callable[[np.ndarray], float],
             return points
 
         # false positive warning: np.dot returns scalar in this case
-        next_point = last_point + direction * linear_search(lambda l: target_function(last_point + direction * l),
-                                                            lambda l: np.dot(direction, gradient_function(
-                                                                last_point + direction * l)))
+        last_step_length = linear_search(lambda l: target_function(last_point + last_direction * l),
+                                         lambda l: np.dot(last_direction, gradient_function(
+                                             last_point + last_direction * l)), iteration=iteration)
+        next_point = last_point + last_direction * last_step_length
         points.append(next_point)
     return points
 
 
-def gradient_descent_with_momentum(gamma: float):
+def gradient_descent_with_momentum(gamma: float, nesterov=False):
     assert 0 <= gamma < 1
 
     def search_function(target_function: Callable[[np.ndarray], float],
                         gradient_function: Callable[[np.ndarray], np.ndarray],
-                        direction_function: Callable[[np.ndarray], np.ndarray],
+                        direction_function,
                         x0: np.ndarray,
                         linear_search: Callable[[Callable[[float], float], Callable[[float], float]], float],
                         terminate_condition: Callable[[Callable[[np.ndarray], float], List[np.ndarray]], bool]):
         previous_direction = 0
 
-        def get_direction(x: np.ndarray):
+        def get_direction(x: np.ndarray, last_step_length=0, last_direction=None, **kwargs):
             nonlocal previous_direction
-            previous_direction = gamma * previous_direction + (1 - gamma) * -direction_function(x)
+            previous_direction = gamma * previous_direction + (1 - gamma) * -direction_function(
+                x + last_step_length * last_direction if nesterov else x, **kwargs)
             return -previous_direction
 
         return gradient_descent(target_function, gradient_function, get_direction, x0, linear_search,
@@ -66,7 +74,8 @@ def steepest_descent_base(base_search):
                x0: np.ndarray,
                linear_search: Callable[[Callable[[float], float], Callable[[float], float]], float],
                terminate_condition: Callable[[Callable[[np.ndarray], float], List[np.ndarray]], bool]):
-        return base_search(target_function, gradient_function, lambda x: -gradient_function(x), x0, linear_search,
+        return base_search(target_function, gradient_function, lambda x, **kwargs: -gradient_function(x), x0,
+                           linear_search,
                            lambda f, steps: terminate_condition(f, steps) or (
                                    len(steps) > 2 and np.linalg.norm(steps[-1] - steps[-2]) < precision))
 
@@ -82,8 +91,8 @@ def steepest_descent(target_function: Callable[[np.ndarray], float],
                                                    terminate_condition)
 
 
-def steepest_descent_with_momentum(gamma: float):
-    return steepest_descent_base(gradient_descent_with_momentum(gamma))
+def steepest_descent_with_momentum(gamma: float, nesterov=False):
+    return steepest_descent_base(gradient_descent_with_momentum(gamma, nesterov))
 
 
 """ Could be:
@@ -114,23 +123,12 @@ def gradient_descent_minibatch_base(base_search):
         def sum_functions(funcs):
             return lambda x: sum(f(x) for f in funcs)
 
-        def with_call_num(f):
-            call_num = 0
-
-            def resulting_func(*args):
-                nonlocal call_num
-                result = f(call_num, *args)
-                call_num += 1
-                return result
-
-            return resulting_func
-
-        def get_direction(iteration: int, x: np.ndarray):
+        def get_direction(x: np.ndarray, iteration=0, **kwargs):
             return -sum(ordered_gradient_functions[(iteration * batch_size + i) % len(gradient_functions)](x) for i in
                         range(batch_size))
 
         return base_search(sum_functions(target_functions), sum_functions(gradient_functions),
-                           with_call_num(get_direction), x0, with_call_num(learning_rate_scheduler),
+                           get_direction, x0, learning_rate_scheduler,
                            terminate_condition)
 
     return result
@@ -146,16 +144,16 @@ def gradient_descent_minibatch(target_functions: List[Callable[[np.ndarray], flo
                                                              learning_rate_scheduler, terminate_condition)
 
 
-def gradient_descent_minibatch_with_momentum(gamma: float):
-    return gradient_descent_minibatch_base(gradient_descent_with_momentum(gamma))
+def gradient_descent_minibatch_with_momentum(gamma: float, nesterov=False):
+    return gradient_descent_minibatch_base(gradient_descent_with_momentum(gamma, nesterov))
 
 
 def step_learning_scheduler(initial_rate: float, step_rate: float, step_length: int):
-    return lambda n, *args: initial_rate * step_rate ** floor(n / step_length)
+    return lambda *args, iteration=0, **kwargs: initial_rate * step_rate ** floor(iteration / step_length)
 
 
 def exponential_learning_scheduler(initial_rate: float, step_rate: float):
-    return lambda n, *args: initial_rate * exp(-step_rate * n)
+    return lambda *args, iteration=0, **kwargs: initial_rate * exp(-step_rate * iteration)
 
 
 def find_upper_bound(f: Callable[[float], float]):
@@ -173,7 +171,7 @@ def fixed_step_search(step_length):
     return lambda f, derivative: step_length
 
 
-def bin_search(f: Callable[[float], float], derivative: Callable[[float], float]):
+def bin_search(f: Callable[[float], float], derivative: Callable[[float], float], **kwargs):
     # assume derivative(0) < 0 and derivative is rising
     l = 0
     r = find_upper_bound(f)
@@ -188,7 +186,7 @@ def bin_search(f: Callable[[float], float], derivative: Callable[[float], float]
 
 
 def bin_search_with_iters(iters):
-    def search(f: Callable[[float], float], derivative: Callable[[float], float]):
+    def search(f: Callable[[float], float], derivative: Callable[[float], float], **kwargs):
         # assume derivative(0) < 0 and derivative is rising
         i = 0
         l = 0
@@ -206,7 +204,7 @@ def bin_search_with_iters(iters):
     return search
 
 
-def golden_ratio_search(f: Callable[[float], float], _derivative: Callable[[float], float]):
+def golden_ratio_search(f: Callable[[float], float], _derivative: Callable[[float], float], **kwargs):
     l = 0
     r = find_upper_bound(f)
     delta = (r - l) / scipy.constants.golden
@@ -229,7 +227,7 @@ def golden_ratio_search(f: Callable[[float], float], _derivative: Callable[[floa
 
 
 def fibonacci_search(n_iters):
-    def search(f, _derivative):
+    def search(f, _derivative, **kwargs):
         l = 0
         r = find_upper_bound(f)
         length = r - l
@@ -259,7 +257,7 @@ def fibonacci_search(n_iters):
 def wolfe_conditions_search(c1, c2):
     assert 0 < c1 < c2 < 1
 
-    def search(f: Callable[[float], float], derivative: Callable[[float], float]):
+    def search(f: Callable[[float], float], derivative: Callable[[float], float], **kwargs):
         # Need to find x such that:
         # 1) f(x) <= f(0) + c1 * x * derivative(0)
         # 2) derivative(x) >= c2 * derivative(0)
