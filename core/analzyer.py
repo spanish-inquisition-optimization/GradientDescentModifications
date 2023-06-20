@@ -16,7 +16,6 @@ def test_batch(fs, dfs, x0, scheduler):
     )[-1]
 
     target_val = f(target_point)
-    print(f"target point = {target_point}, with value = {target_val}")
 
     result = []
     for batch in range(1, len(fs) + 1):
