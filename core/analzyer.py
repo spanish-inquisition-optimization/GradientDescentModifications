@@ -42,23 +42,26 @@ def test_perfomance(funs, dfuns, batch_size, x0):
     f6, df6 = wrap_input()
 
     def terminate(f, steps):
-        return f(steps[-1]) < 0.001 or len(steps) > 1000
+        return f(steps[-1]) < 0.01 or len(steps) > 1000
+
+    exp_scheduler1 = exponential_learning_scheduler(1, 0.2, batch_size, len(funs))
+    exp_scheduler2 = exponential_learning_scheduler(0.3, 0.2, batch_size, len(funs))
 
     p1 = gradient_descent_minibatch(
         f1, df1, batch_size, x0,
-        exponential_learning_scheduler(0.3, 0.2, batch_size, len(funs)),
+        exp_scheduler2,
         terminate
     )
 
     p2 = gradient_descent_minibatch_with_momentum(0.2)(
         f2, df2, batch_size, x0,
-        exponential_learning_scheduler(0.3, 0.2, batch_size, len(funs)),
+        exp_scheduler2,
         terminate
     )
 
     p3 = gradient_descent_minibatch_with_momentum(0.7, True)(
         f3, df3, batch_size, x0,
-        exponential_learning_scheduler(0.3, 0.2, batch_size, len(funs)),
+        exp_scheduler2,
         terminate
     )
 
@@ -70,11 +73,11 @@ def test_perfomance(funs, dfuns, batch_size, x0):
 
     p5 = gradient_descent_minibatch_rms_prop(0.2)(
         f5, df5, batch_size, x0,
-        exponential_learning_scheduler(0.3, 0.2, batch_size, len(funs)),
+        exp_scheduler1,
         terminate
     )
 
-    p6 = steepest_descent_adam(0.9, 0.999)(fn_sum(*f6), fn_sum(*df6), x0, fixed_step_search(10), terminate)
+    p6 = steepest_descent_adam(0.9, 0.999)(fn_sum(*f6), fn_sum(*df6), x0, bin_search_with_iters(5), terminate)
 
     return [
         (f"Minibatch", f"{sum(f.calls for f in f1) + sum(f.calls for f in df1)}/{len(p1)}"),
