@@ -56,7 +56,7 @@ def gradient_descent_with_momentum(gamma: float, nesterov=False):
                         terminate_condition: Callable[[Callable[[np.ndarray], float], List[np.ndarray]], bool]):
         def get_direction(x: np.ndarray, last_step_length=0, last_direction=None, **kwargs):
             return -(gamma * -last_direction + (1 - gamma) * -direction_function(
-                x + last_step_length * last_direction if nesterov else x, **kwargs))
+                x + last_step_length * gamma * last_direction if nesterov else x, **kwargs))
 
         return gradient_descent(target_function, gradient_function, get_direction, x0, linear_search,
                                 terminate_condition)
@@ -75,8 +75,8 @@ def adagrad_descent(target_function: Callable[[np.ndarray], float],
     def get_direction(x: np.ndarray, **kwargs):
         nonlocal G
         current_direction = -direction_function(x, **kwargs)
-        G = G + np.square(current_direction)
-        return -np.multiply(np.array([1 / (sqrt(x + 1e-8)) for x in G]), current_direction)
+        G = G + np.outer(current_direction, current_direction)
+        return -np.divide(current_direction, np.array(np.sqrt(np.diagonal(G) + 1e-8)))
 
     return gradient_descent(target_function, gradient_function, get_direction, x0, linear_search, terminate_condition)
 
@@ -96,7 +96,7 @@ def rms_prop_descent(gamma: float):
             nonlocal G
             current_direction = -direction_function(x, **kwargs)
             G = gamma * G + (1 - gamma) * np.square(current_direction)
-            return -np.multiply(np.array([1 / (sqrt(x + 1e-8)) for x in G]), current_direction)
+            return -np.divide(current_direction, np.sqrt(G + 1e-8))
 
         return gradient_descent(target_function, gradient_function, get_direction, x0, linear_search,
                                 terminate_condition)
@@ -121,8 +121,9 @@ def adam_descent(alpha: float, beta: float):
             current_direction = -direction_function(x, iteration=iteration, **kwargs)
             v = alpha * v + (1 - alpha) * current_direction
             s = beta * s + (1 - beta) * np.square(current_direction)
-            return -np.multiply(np.array([1 / (sqrt(x / (1 - beta ** (iteration + 1)) + 1e-8)) for x in s]),
-                                v / (1 - alpha ** (iteration + 1)))
+            v_normalized = v / (1 - alpha ** (iteration + 1))
+            s_normalized = s / (1 - beta ** (iteration + 1))
+            return -np.divide(v_normalized, np.sqrt(s_normalized + 1e-8))
 
         return gradient_descent(target_function, gradient_function, get_direction, x0, linear_search,
                                 terminate_condition)
