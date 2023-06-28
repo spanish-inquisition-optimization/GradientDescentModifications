@@ -22,6 +22,7 @@ def gradient_descent(target_function: Callable[[np.ndarray], float],
     points = [np.array(x0)]
     last_step_length = 0
     last_direction = 0
+    norm_zero_cnt = 0
 
     while not terminate_condition(target_function, points):
         last_point = points[-1]
@@ -32,7 +33,13 @@ def gradient_descent(target_function: Callable[[np.ndarray], float],
         norm = np.linalg.norm(last_direction)
 
         if norm == 0:
+            norm_zero_cnt += 1
+            if norm_zero_cnt == 10:
+                return points
             continue
+        else:
+            norm_zero_cnt = 0
+
         if norm > 1e20:
             return points
 

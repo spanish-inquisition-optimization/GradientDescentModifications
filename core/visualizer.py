@@ -180,3 +180,16 @@ def test_linear_search(linear_search: Callable[[Callable[[float], float], Callab
                 f"{setup.name} : f called {mocked_f.n_calls} times, f' called {mocked_grad.n_calls} times, total score: {mocked_f.n_calls + mocked_grad.n_calls}")
         else:
             visualize_optimizing_process(setup.f, setup.roi, np.array(trajectory), resultant_true_minimum)
+
+
+def visualize_linear_regression_solution(original_a, original_b, result_a, result_b, dataset):
+    def get_function(a, b):
+        return lambda x: a * x + b
+
+    xs = [point[0] for point in dataset]
+    ys = [point[1] for point in dataset]
+    r = np.arange(min(xs) - 2, max(xs) + 3)
+    fig, ax = plt.subplots()
+    ax.scatter(xs, ys)
+    ax.plot(r, list(map(get_function(original_a, original_b), r)), c='g')
+    ax.plot(r, list(map(get_function(result_a, result_b), r)), c='r')
